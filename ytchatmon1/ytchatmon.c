@@ -1,0 +1,561 @@
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <cnsslclient.h>
+#include <cnhttpclient.h>
+#include <jsmn.h>
+#include <unistd.h>
+
+
+
+#ifndef LOADFILEDEFINED
+#define LOADFILEDEFINED
+static int LoadFileLineIntoBuffer( const char * folder_prefix, const char * file, char * buffer, int buffersize )
+{
+	char filename[1024];
+	snprintf( filename, 1024, "%s/%s", folder_prefix, file );
+	FILE * f = fopen( filename, "r" );
+	if( !f )
+	{
+		fprintf( stderr, "Error: can't get %s\n", file );
+		return -1;
+	}
+	int c;
+	int i = 0;
+	while( ( c = fgetc( f ) ) != EOF && i < buffersize-1 )
+	{
+		if( c == '\n' ) break;
+		buffer[i++] = c;
+	}
+	buffer[i] = 0;
+	fclose( f );
+	return i;
+}
+#endif
+
+static int LoadFileLineByNumberIntoBuffer(const char* folder_prefix, const char* file, int line, char* buffer, int buffersize)
+{
+
+	char filename[1024];
+	snprintf(filename, 1024, "%s/%s", folder_prefix, file);
+	FILE* f = fopen(filename, "r");
+	if (!f)
+	{
+		fprintf(stderr, "Error: can't get %s\n", file);
+		return -1;
+	}
+	int c;
+	int i = 0;
+	while ((c = fgetc(f)) != EOF && i < buffersize - 1)
+	{
+		if (c == '\n')
+		{
+			
+			if (line == 0)
+			{
+				break;
+			}
+			line--;
+		}
+		else if (line == 0) 
+		{
+			buffer[i++] = c;
+		}
+	}
+	buffer[i] = 0;
+	fclose(f);
+	return i;
+}
+
+
+const char * GetTokenByName( char * origtext, jsmntok_t * tok )
+{
+	origtext[tok->end] = 0;
+	return origtext + tok->start;
+}
+
+void ProcessNextElement( jsmntok_t ** tok )
+{
+	int nr_children = (*tok)->size;
+	int j;
+	//printf( "Process Next: %d\n", nr_children );
+	for( j = 0; j < nr_children; j++ )
+	{
+		(*tok)++;
+		ProcessNextElement( tok );
+	}
+}
+
+
+const char* ReadInsideChatSnippet(char* origtext, jsmntok_t** tok)
+{
+	const char* msgo = 0;
+	int j;
+	int nr_children = (*tok)->size;
+
+	for (j = 0; j < nr_children; j++)
+	{
+		(*tok)++;
+		const char* st = GetTokenByName(origtext, *tok);
+
+		if (strcmp(st, "displayMessage") == 0)
+		{
+			msgo = GetTokenByName(origtext, (*tok) + 1);
+			ProcessNextElement(tok);
+		}
+		else
+		{
+			ProcessNextElement(tok);
+		}
+	}
+	return msgo;
+}
+
+
+const char * ReadInsideChatAuthorDetails( char * origtext, jsmntok_t ** tok )
+{
+	const char * auth = 0;
+	int j;
+	int nr_children = (*tok)->size;
+
+	for( j = 0; j < nr_children; j++ )
+	{
+		(*tok)++;
+		const char * st = GetTokenByName( origtext, *tok );
+
+		if( strcmp( st, "displayName" ) == 0 )
+		{
+			auth = GetTokenByName( origtext, (*tok) + 1 );
+			ProcessNextElement( tok );
+		}
+
+		ProcessNextElement( tok );
+	}
+	return auth;
+}
+
+
+void ReadChatEntryV1API(char* origtext, jsmntok_t** tok, const char** chatsnip, const char** authorsnip)
+{
+	//Found items... Advnce to next token.
+	int j;
+	int nr_children = (*tok)->size;
+
+	for (j = 0; j < nr_children; j++)
+	{
+		(*tok)++;
+		const char* st = GetTokenByName(origtext, *tok);
+		printf("%s", st);
+		if (strcmp(st, "snippet") == 0)
+		{
+			(*tok)++;
+			*chatsnip = ReadInsideChatSnippet(origtext, tok);
+		}
+	}
+}
+
+void ReadChatEntry( char * origtext, jsmntok_t ** tok, const char ** chatsnip, const char ** authorsnip )
+{
+	//Found items... Advnce to next token.
+	int j;
+	int nr_children = (*tok)->size;
+
+	for( j = 0; j < nr_children; j++ )
+	{
+		(*tok)++;
+		const char * st = GetTokenByName( origtext, *tok );
+		
+		if( strcmp( st, "snippet" ) == 0 )
+		{
+			(*tok)++;
+			*chatsnip = ReadInsideChatSnippet( origtext, tok );
+		}
+		else if( strcmp( st, "authorDetails" ) == 0 )
+		{
+			(*tok)++;
+			*authorsnip = ReadInsideChatAuthorDetails( origtext, tok );
+		}
+		else
+		{
+			ProcessNextElement( tok );
+		}
+	}
+}
+
+char* ProcessChatMessageResponseV1API(char* origtext, jsmntok_t** tok, char** continuation) {
+	int retlen = 0;
+	int retmalloc = 1024;
+	char* ret = malloc(retmalloc);
+
+	int nr_children = (*tok)->size;
+	int j;
+
+	for (j = 0; j < nr_children; j++)
+	{
+		(*tok)++;
+		
+		const char* st = GetTokenByName(origtext, *tok);
+		printf("TOKEN: %s\n", st);
+		if (*tok.)
+		if (strcmp(st, "response"))
+		{
+			
+		}
+		ProcessNextElement(tok);
+	}
+	ret[retlen] = 0;
+	return ret;
+
+
+}
+
+char * ProcessChatMessageResponse(char * origtext, jsmntok_t ** tok, jsmntok_t * tokend, int * pollinfo, char ** NextPageToken, int show_history )
+{
+	int retlen = 0;
+	int retmalloc = 1024;
+	char * ret = malloc( retmalloc );
+
+	int nr_children = (*tok)->size;
+	int j;
+
+	for( j = 0; j < nr_children; j++ )
+	{
+		(*tok)++;
+		const char * st = GetTokenByName( origtext, *tok );
+
+		if( strcmp( st, "pollingIntervalMillis" ) == 0 )
+		{			
+			const char * st = GetTokenByName( origtext, *tok + 1 );
+			if( pollinfo ) *pollinfo = atoi( st );
+		}
+		else if( strcmp( st, "nextPageToken" ) == 0 )
+		{
+			if( NextPageToken )
+			{
+				if( *NextPageToken ) free( *NextPageToken );
+				*NextPageToken = strdup( GetTokenByName( origtext, *tok + 1 ) );
+			}
+		}
+		else if( strcmp( st, "items" ) == 0 )
+		{
+			(*tok)++;
+			int nr_children = (*tok)->size;
+			int i;
+			for( i = 0; i < nr_children; i++ )
+			{
+				(*tok)++;
+				const char * chatsnip, *authorsnip;
+				chatsnip = authorsnip = 0;
+				ReadChatEntry( origtext, tok, &chatsnip, &authorsnip );
+
+				if( show_history )
+				{
+					if( (retlen + 1024) > retmalloc )
+					{
+						retmalloc += 1024;
+						ret = realloc( ret, retmalloc );
+					}
+
+					retlen += sprintf( ret + retlen, "%s\t%s\n", authorsnip, chatsnip );
+				}
+			}
+		}
+		ProcessNextElement( tok );
+	}
+	ret[retlen] = 0;
+	return ret;
+}
+
+char* GetLivechatDataV1API(const char* apikey, char** continuation)
+{
+	char curlurlbase[8192];
+	char curlurl[8192];
+	char apiKeybuff[128];
+	char continuationbuff[512];
+	const char* reqtype = "authorDetails,snippet";
+
+	if (apikey == 0 || apikey[0] == '-')
+	{
+		int len = LoadFileLineIntoBuffer("..", "ytInitialData.txt", apiKeybuff, sizeof(apiKeybuff));
+		if (len < 5)
+		{
+			fprintf(stderr, "Error: apiKey Invalid\n");
+			return strdup("");
+		}
+		apikey = apiKeybuff;
+	}
+	printf("%s\n", apikey);
+	
+	
+
+	if (*continuation == 0 || *continuation[0] == '-')
+	{
+		int len = LoadFileLineByNumberIntoBuffer("..", "ytInitialData.txt", 1, continuationbuff, sizeof(continuationbuff));
+		printf(continuationbuff);
+		if (len < 5)
+		{
+			fprintf(stderr, "Error: Continuation Invalid\n");
+			
+			return strdup("");
+		}
+		*continuation = continuationbuff;
+	}
+
+	//printf("CONTINUATION TOKEN: %s\n", *continuation);
+
+	int Oauth = 0;
+	if (Oauth)
+	{
+
+		sprintf(curlurlbase, "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat?commandMetadata=%5Bobject%20Object%5D&continuation=%s&pbj=1", *continuation);
+		
+	}
+	else {
+
+		sprintf(curlurlbase, "https://www.youtube.com/live_chat/get_live_chat?commandMetadata=%5Bobject%20Object%5D&continuation=%s&pbj=1", *continuation);
+			
+
+	}
+
+	//printf("%s\n",curlurlbase);
+
+	struct cnhttpclientrequest req;
+	memset(&req, 0, sizeof(req));
+	req.host = 0;
+	req.port = 0;
+	req.URL = curlurl;
+	req.AuxData = 0;
+	req.AuxDataLength = 0;
+
+	sprintf(curlurl, "%s",
+		curlurlbase);
+
+	char auxhead[8192];
+	sprintf(auxhead, "user-agent: %s", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.105 Safari/537.36");
+	req.AddedHeaders = auxhead;
+
+
+	//Get a bunch of messages
+	struct cnhttpclientresponse* r = CNHTTPClientTransact(&req);
+
+	//r->payload[r->payloadlen - 1] = 0;
+	printf("%s\n", curlurl);
+	printf("%d\n", r->payloadlen);
+	
+	//Uncomment this if you aren't getting anything.
+	FILE* f = fopen("../payload.html", "wb");
+	fprintf( f,"%s\n", r->payload );
+	fclose(f);
+
+
+	int tokenlen = 131072;
+	jsmntok_t* tokens = malloc(sizeof(jsmntok_t) * tokenlen);
+	memset(tokens, 0, sizeof(jsmntok_t) * tokenlen);
+	jsmn_parser jsmnp;
+
+
+	jsmn_init(&jsmnp);
+	int tottoks = jsmn_parse(&jsmnp, r->payload, r->payloadlen,
+		tokens, tokenlen);
+
+	printf("Total TOKENS: %d\n", tottoks);
+
+	char* ret = 0;
+
+	if (tottoks > 0)
+	{
+		
+		ret = ProcessChatMessageResponseV1API(r->payload, &tokens, continuation);
+	}
+	else
+	{
+		fprintf(stderr, "Error %d parsing the JSON : %s\n", &tokens, r->payload);
+		ret = 0;
+	}
+	free(tokens);
+	CNHTTPClientCleanup(r);
+	return ret;
+
+}
+
+char * GetLivechatData( const char * livechatid, char ** nextpagetoken, int include_history, int * pollinfo )
+{
+	char curlurlbase[8192];
+	char curlurl[8192];
+	char livechatbuff[128];
+	const char * reqtype = "authorDetails,snippet";
+
+	if( livechatid == 0 || livechatid[0] == '-' )
+	{
+		int len = LoadFileLineIntoBuffer( "..", "live_chat_id.txt", livechatbuff, sizeof( livechatbuff ) );
+		if( len < 5 )
+		{
+			fprintf( stderr, "Error: Live chat ID Invalid\n" );
+			return strdup("");
+		}
+		livechatid = livechatbuff;
+	}
+	
+	sprintf( curlurlbase, "https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=%s&",livechatid);
+
+	char apikey[8192];
+	int uses_api_key = 0;
+
+	{
+		FILE * f = fopen( "../.ytapikey.txt", "r" );
+		if(f)
+		{
+			fscanf( f, "%8100s", apikey );
+			fclose( f );	
+			uses_api_key = 1;
+		}
+		sprintf( curlurlbase + strlen(curlurlbase), "key=%s&",apikey);
+	}
+
+	struct cnhttpclientrequest req;
+	memset( &req, 0, sizeof( req ) );
+	req.host = 0;
+	req.port = 0;
+	req.URL = curlurl;
+	req.AuxData = 0;
+	req.AuxDataLength = 0;
+
+
+	if( !uses_api_key )
+	{
+		char oauthbear[8192];
+		FILE * f = fopen( "../.oauthtoken.txt", "r" );
+		if( !f )
+		{
+			fprintf( stderr, "Error: no oauth token found.  Run yt_oauth_helper\n" );
+			return 0;
+		}
+		fscanf( f, "%s", oauthbear );
+		fclose( f );	
+		char auxhead[8192];
+		sprintf( auxhead, "Authorization: Bearer %s", oauthbear );
+		req.AddedHeaders = auxhead;
+	}
+
+	sprintf( curlurl, "%s",
+		curlurlbase,
+		reqtype,
+		(nextpagetoken&&*nextpagetoken)?"&pageToken=":"",
+		(nextpagetoken&&*nextpagetoken)?*nextpagetoken:"" );
+
+	//printf("%s\n", curlurl );
+
+	//Get a bunch of messages
+	struct cnhttpclientresponse * r = CNHTTPClientTransact( &req );
+
+	r->payload[r->payloadlen-1] = 0;
+	//Uncomment this if you aren't getting anything.
+	//printf( "PAYLOAD: %s\n", r->payload );
+
+	int tokenlen = 131072;
+	jsmntok_t * tokens = malloc( sizeof( jsmntok_t ) * tokenlen );
+	memset( tokens, 0, sizeof( jsmntok_t ) * tokenlen  );
+	jsmn_parser jsmnp;
+
+
+	jsmn_init( &jsmnp );
+	int tottoks = jsmn_parse(&jsmnp, r->payload, r->payloadlen,
+		tokens, tokenlen );
+
+	char * ret = 0;
+
+	if( tottoks > 0 )
+	{
+		jsmntok_t * tok = &tokens[0];
+		ret = ProcessChatMessageResponse( r->payload, &tok, &tokens[tottoks], pollinfo, nextpagetoken, include_history );
+	}
+	else
+	{
+		fprintf( stderr, "Error %d parsing the JSON : %s\n", tottoks, r->payload );
+		ret = 0;
+	}
+	free( tokens );
+	CNHTTPClientCleanup( r );
+	return ret;
+}
+
+
+#ifdef BUILD_EXE
+
+int main( int argc, char ** argv )
+{
+
+	int show_history = 0;
+	int notfirst = 0;
+	int pollinfo = 0;
+	if (argc == 4)
+	{
+		const char* apiKey= argv[1];
+		char* continuation = argv[2];
+		show_history = atoi(argv[3]);
+		char* ret = GetLivechatDataV1API(apiKey, &continuation);
+
+		if (ret)
+		{
+			printf("%s", ret);
+			fflush(stdout);
+		}
+
+		while (1)
+		{
+			ret = GetLivechatDataV1API(apiKey, &continuation);
+			if (ret)
+			{
+				printf("%s", ret);
+				fflush(stdout);
+			}
+			else
+				sleep(2);
+		}
+
+	}
+
+	else if( argc == 3 )
+	{
+
+		show_history = atoi(argv[2]);
+		const char* livechatid = argv[1];//"EiEKGFVDRzd5SVd0VndjRU5nX1pTLW5haGc1ZxIFL2xpdmU";
+		char* nextpagetoken = 0;
+
+		char* ret = GetLivechatData(livechatid, &nextpagetoken, show_history, &pollinfo);
+		if (ret)
+		{
+			printf("%s", ret);
+			fflush(stdout);
+		}
+
+		while (1)
+		{
+			ret = GetLivechatData(livechatid, &nextpagetoken, 1, &pollinfo);
+			if (ret)
+			{
+				printf("%s", ret);
+				fflush(stdout);
+			}
+			if (pollinfo)
+				usleep(pollinfo * 1000);
+			else
+				sleep(2);
+		}
+
+	}
+	else 
+	{
+		fprintf(stderr, "Error! Usage:");
+		fprintf(stderr, "                 ./chatmon [livechatid use - if you want to use id from ytstreamstats] [show_history (0/1)]\n");
+		fprintf(stderr, "                 or");
+		fprintf(stderr, "                 ./chatmon [apiKey use - if you want to use id from ytstreamstats] [continue use - if you want to use id from ytstreamstats] [show_history (0/1)]\n");
+		fprintf(stderr, "Reads youtube livestream comments and sends to STDOUT. Format: [user]\\t[text]\\n\n");
+		return -5;
+
+	}
+
+
+}
+#endif
+
