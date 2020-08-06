@@ -86,6 +86,20 @@ void ProcessNextElement( jsmntok_t ** tok )
 	}
 }
 
+void ProcessNextElementV1API(jsmntok_t* tok)
+{
+	int nr_children = (tok)->size;
+	printf("%s\n", "here");
+	int j;
+	//printf( "Process Next: %d\n", nr_children );
+	for (j = 0; j < nr_children; j++)
+	{
+		(tok)++;
+		ProcessNextElementV1API(tok);
+	}
+}
+
+
 
 const char* ReadInsideChatSnippet(char* origtext, jsmntok_t** tok)
 {
@@ -186,22 +200,21 @@ char* ProcessChatMessageResponseV1API(char* origtext, jsmntok_t** tok, char** co
 	int retlen = 0;
 	int retmalloc = 1024;
 	char* ret = malloc(retmalloc);
-
+	
 	int nr_children = (*tok)->size;
+	printf("number of children: %d", nr_children);
 	int j;
 
 	for (j = 0; j < nr_children; j++)
 	{
-		(*tok)++;
 		
 		const char* st = GetTokenByName(origtext, *tok);
 		printf("TOKEN: %s\n", st);
-		if (*tok.)
 		if (strcmp(st, "response"))
 		{
 			
 		}
-		ProcessNextElement(tok);
+		ProcessNextElementV1API(*tok);
 	}
 	ret[retlen] = 0;
 	return ret;
@@ -284,14 +297,14 @@ char* GetLivechatDataV1API(const char* apikey, char** continuation)
 		}
 		apikey = apiKeybuff;
 	}
-	printf("%s\n", apikey);
+	//printf("%s\n", apikey);
 	
 	
-
+	printf("Continuation: %s\n", *continuation);
 	if (*continuation == 0 || *continuation[0] == '-')
 	{
 		int len = LoadFileLineByNumberIntoBuffer("..", "ytInitialData.txt", 1, continuationbuff, sizeof(continuationbuff));
-		printf(continuationbuff);
+		//printf(continuationbuff);
 		if (len < 5)
 		{
 			fprintf(stderr, "Error: Continuation Invalid\n");
@@ -339,33 +352,71 @@ char* GetLivechatDataV1API(const char* apikey, char** continuation)
 	struct cnhttpclientresponse* r = CNHTTPClientTransact(&req);
 
 	//r->payload[r->payloadlen - 1] = 0;
-	printf("%s\n", curlurl);
-	printf("%d\n", r->payloadlen);
+	//printf("%s\n", curlurl);
+	//printf("%d\n", r->payloadlen);
 	
 	//Uncomment this if you aren't getting anything.
 	FILE* f = fopen("../payload.html", "wb");
 	fprintf( f,"%s\n", r->payload );
 	fclose(f);
 
-
-	int tokenlen = 131072;
-	jsmntok_t* tokens = malloc(sizeof(jsmntok_t) * tokenlen);
-	memset(tokens, 0, sizeof(jsmntok_t) * tokenlen);
 	jsmn_parser jsmnp;
 
+	
+	jsmn_init(&jsmnp);
+	int tokenTotal = jsmn_parse(&jsmnp, r->payload, r->payloadlen,
+		NULL, 1024);
+
+	//printf("Number of expected TOKENS: %d\n", tokenTotal);
+	//printf("%s", r->payload);
+	jsmntok_t * tokens=malloc(sizeof(jsmntok_t)*tokenTotal);
+	memset(tokens,0, sizeof(jsmntok_t) * tokenTotal);
 
 	jsmn_init(&jsmnp);
 	int tottoks = jsmn_parse(&jsmnp, r->payload, r->payloadlen,
-		tokens, tokenlen);
+		tokens, tokenTotal);
 
-	printf("Total TOKENS: %d\n", tottoks);
+	//printf("Total TOKENS: %d\n", tottoks);
 
 	char* ret = 0;
 
 	if (tottoks > 0)
 	{
-		
-		ret = ProcessChatMessageResponseV1API(r->payload, &tokens, continuation);
+		int to;
+		for (to = 1; to < tottoks; to+=2) 
+		{
+			if (tokens[to].type == JSMN_STRING)
+			{
+				char* start = &(r->payload)[tokens[to].start];
+				int size = tokens[to].end - tokens[to].start;
+				//printf("%d\n",size);
+				char key[size + 1];
+				memcpy(key, start, size);
+				key[size] = '\0';
+				printf("\n%s: ", key);
+				if (tokens[to + 1].type == JSMN_STRING)
+
+				{
+					
+
+					start = &(r->payload)[tokens[to + 1].start];
+					size = tokens[to + 1].end - tokens[to + 1].start;
+					char value[size+1];
+					memcpy(value, start, size);
+					value[size ] = '\0';
+					printf("'%s'\n", value);
+					if (strcmp(key, "continuation") == 0)
+					{
+						memcpy(*continuation, value, size);
+
+						//printf("\n%s: ", key);
+						//printf("'%s'\n", value);
+					}
+
+				}
+			}
+		}
+		//ret = ProcessChatMessageResponseV1API(r->payload, &tokens, continuation);
 	}
 	else
 	{
