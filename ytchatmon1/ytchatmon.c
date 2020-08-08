@@ -86,19 +86,6 @@ void ProcessNextElement( jsmntok_t ** tok )
 	}
 }
 
-void ProcessNextElementV1API(jsmntok_t* tok)
-{
-	int nr_children = (tok)->size;
-	printf("%s\n", "here");
-	int j;
-	//printf( "Process Next: %d\n", nr_children );
-	for (j = 0; j < nr_children; j++)
-	{
-		(tok)++;
-		ProcessNextElementV1API(tok);
-	}
-}
-
 
 
 const char* ReadInsideChatSnippet(char* origtext, jsmntok_t** tok)
@@ -149,25 +136,6 @@ const char * ReadInsideChatAuthorDetails( char * origtext, jsmntok_t ** tok )
 }
 
 
-void ReadChatEntryV1API(char* origtext, jsmntok_t** tok, const char** chatsnip, const char** authorsnip)
-{
-	//Found items... Advnce to next token.
-	int j;
-	int nr_children = (*tok)->size;
-
-	for (j = 0; j < nr_children; j++)
-	{
-		(*tok)++;
-		const char* st = GetTokenByName(origtext, *tok);
-		printf("%s", st);
-		if (strcmp(st, "snippet") == 0)
-		{
-			(*tok)++;
-			*chatsnip = ReadInsideChatSnippet(origtext, tok);
-		}
-	}
-}
-
 void ReadChatEntry( char * origtext, jsmntok_t ** tok, const char ** chatsnip, const char ** authorsnip )
 {
 	//Found items... Advnce to next token.
@@ -196,31 +164,125 @@ void ReadChatEntry( char * origtext, jsmntok_t ** tok, const char ** chatsnip, c
 	}
 }
 
-char* ProcessChatMessageResponseV1API(char* origtext, jsmntok_t** tok, char** continuation) {
+char* ProcessGetLiveChatResponseV1API(char* origtext, jsmntok_t* tokens, int tottoks, char** continuation) {
 	int retlen = 0;
 	int retmalloc = 1024;
 	char* ret = malloc(retmalloc);
-	
-	int nr_children = (*tok)->size;
-	printf("number of children: %d", nr_children);
-	int j;
 
-	for (j = 0; j < nr_children; j++)
+	int to;
+	char messageAuthor[64];
+	char messageText[256];
+	for (to = 1; to < tottoks; to ++)
 	{
-		
-		const char* st = GetTokenByName(origtext, *tok);
-		printf("TOKEN: %s\n", st);
-		if (strcmp(st, "response"))
+		if (tokens[to].type == JSMN_STRING)
 		{
 			
+			char* start = &(origtext)[tokens[to].start];
+			int size = tokens[to].end - tokens[to].start;
+			char key[size + 1];
+			memcpy(key, start, size);
+			key[size] = '\0';
+			int comparison = strcmp(key, "liveChatContinuation");
+			printf("%s-%d\n", key, comparison);
+			if (comparison == 0)
+			{
+				printf("wtf");
+				int offset = 1;
+				
+				char value[512];
+				do
+				{
+					memset(value, 0, sizeof(value) * sizeof(char));
+					start = &(origtext)[tokens[to + offset].start];
+					size = tokens[to + offset].end - tokens[to + offset].start;
+					if (size > 512) { continue;}
+					memcpy(value, start,size);
+					value[size] = '\0';
+					//printf("\nvalue: %s\n", value);
+					offset++;
+					
+				} while (strcmp(value, "continuation")!=0);
+				memset(value, 0, sizeof(value) * sizeof(char));
+				
+				start = &(origtext)[tokens[to + offset].start];
+				size = tokens[to + offset].end - tokens[to + offset].start;
+				memcpy(value, start, size);
+				value[size] = '\0';
+
+				//printf("\nvalue: %s\n", value);
+				
+				//*continuation = value;
+				memset(*continuation, 0, sizeof(*continuation) * sizeof(char));
+				//printf("erased");
+				memcpy(*continuation, value, sizeof(value));
+				//printf("CONT: '%s'\n", value);
+				//printf("CONTINUATION: '%s'\n", *continuation);
+
+				
+
+
+			}else if (strcmp(key, "liveChatTextMessageRenderer") == 0)
+			{
+				int offset = 12;
+				char* start = &(origtext)[tokens[to + offset].start];
+				int size = tokens[to + offset].end - tokens[to + offset].start; 
+				char author[size + 1];
+				memcpy(author, start, size);
+				author[size] = '\0';
+
+				memcpy(messageAuthor, author, sizeof(author));
+
+				offset = 8;
+				start = &(origtext)[tokens[to + offset].start];
+				size = tokens[to + offset].end - tokens[to + offset].start;
+				char text[size + 1];
+				memcpy(text, start, size);
+				text[size] = '\0';
+				memcpy(messageText, text, sizeof(text));
+
+
+				if (messageAuthor && messageText)
+				{
+					if ((retlen + 1024) > retmalloc)
+					{
+						retmalloc += 1024;
+						ret = realloc(ret, retmalloc);
+					}
+					//printf("%s\t%s\n", messageAuthor, messageText);
+					retlen += sprintf(ret + retlen, "%s\t%s\n", messageAuthor, messageText);
+										
+				}
+				memset(messageAuthor, 0, 64 * sizeof(char));
+									
+				memset(messageText, 0, 256 * sizeof(char));
+
+			}
+
 		}
-		ProcessNextElementV1API(*tok);
+
+	}
+	ret[retlen] = 0;
+	
+	return ret;
+
+}
+
+/*
+if( (retlen + 1024) > retmalloc )
+					{
+						retmalloc += 1024;
+						ret = realloc( ret, retmalloc );
+					}
+
+					retlen += sprintf( ret + retlen, "%s\t%s\n", authorsnip, chatsnip );
+				}
+			}
+		}
+		ProcessNextElement( tok );
 	}
 	ret[retlen] = 0;
 	return ret;
-
-
-}
+	*/
 
 char * ProcessChatMessageResponse(char * origtext, jsmntok_t ** tok, jsmntok_t * tokend, int * pollinfo, char ** NextPageToken, int show_history )
 {
@@ -378,45 +440,14 @@ char* GetLivechatDataV1API(const char* apikey, char** continuation)
 
 	//printf("Total TOKENS: %d\n", tottoks);
 
+	
+
 	char* ret = 0;
 
 	if (tottoks > 0)
 	{
-		int to;
-		for (to = 1; to < tottoks; to+=2) 
-		{
-			if (tokens[to].type == JSMN_STRING)
-			{
-				char* start = &(r->payload)[tokens[to].start];
-				int size = tokens[to].end - tokens[to].start;
-				//printf("%d\n",size);
-				char key[size + 1];
-				memcpy(key, start, size);
-				key[size] = '\0';
-				printf("\n%s: ", key);
-				if (tokens[to + 1].type == JSMN_STRING)
-
-				{
-					
-
-					start = &(r->payload)[tokens[to + 1].start];
-					size = tokens[to + 1].end - tokens[to + 1].start;
-					char value[size+1];
-					memcpy(value, start, size);
-					value[size ] = '\0';
-					printf("'%s'\n", value);
-					if (strcmp(key, "continuation") == 0)
-					{
-						memcpy(*continuation, value, size);
-
-						//printf("\n%s: ", key);
-						//printf("'%s'\n", value);
-					}
-
-				}
-			}
-		}
-		//ret = ProcessChatMessageResponseV1API(r->payload, &tokens, continuation);
+		ret = ProcessGetLiveChatResponseV1API(r->payload, tokens, tottoks, continuation);
+		
 	}
 	else
 	{
@@ -546,15 +577,20 @@ int main( int argc, char ** argv )
 		show_history = atoi(argv[3]);
 		char* ret = GetLivechatDataV1API(apiKey, &continuation);
 
+		
 		if (ret)
 		{
 			printf("%s", ret);
 			fflush(stdout);
+			
 		}
 
 		while (1)
 		{
+			fflush(stdout);
 			ret = GetLivechatDataV1API(apiKey, &continuation);
+
+
 			if (ret)
 			{
 				printf("%s", ret);
