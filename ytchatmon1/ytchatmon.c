@@ -183,15 +183,15 @@ char* ProcessGetLiveChatResponseV1API(char* origtext, jsmntok_t* tokens, int tot
 			memcpy(key, start, size);
 			key[size] = '\0';
 			int comparison = strcmp(key, "liveChatContinuation");
-			printf("%s-%d\n", key, comparison);
+			//printf("%s-%d\n", key, comparison);
 			if (comparison == 0)
 			{
-				printf("wtf");
-				int offset = 1;
+				int offset = 0;
 				
 				char value[512];
 				do
 				{
+					offset++;
 					memset(value, 0, sizeof(value) * sizeof(char));
 					start = &(origtext)[tokens[to + offset].start];
 					size = tokens[to + offset].end - tokens[to + offset].start;
@@ -199,9 +199,10 @@ char* ProcessGetLiveChatResponseV1API(char* origtext, jsmntok_t* tokens, int tot
 					memcpy(value, start,size);
 					value[size] = '\0';
 					//printf("\nvalue: %s\n", value);
-					offset++;
+					
 					
 				} while (strcmp(value, "continuation")!=0);
+				offset++;
 				memset(value, 0, sizeof(value) * sizeof(char));
 				
 				start = &(origtext)[tokens[to + offset].start];
@@ -223,26 +224,53 @@ char* ProcessGetLiveChatResponseV1API(char* origtext, jsmntok_t* tokens, int tot
 
 			}else if (strcmp(key, "liveChatTextMessageRenderer") == 0)
 			{
-				int offset = 12;
-				char* start = &(origtext)[tokens[to + offset].start];
-				int size = tokens[to + offset].end - tokens[to + offset].start; 
-				char author[size + 1];
-				memcpy(author, start, size);
-				author[size] = '\0';
+				
 
-				memcpy(messageAuthor, author, sizeof(author));
-
-				offset = 8;
-				start = &(origtext)[tokens[to + offset].start];
-				size = tokens[to + offset].end - tokens[to + offset].start;
-				char text[size + 1];
-				memcpy(text, start, size);
-				text[size] = '\0';
-				memcpy(messageText, text, sizeof(text));
-
-
-				if (messageAuthor && messageText)
+				int of=2;
+				int authorOffset=0;
+				int textOffset=0;
+				
+				while (of < 100 && (!authorOffset || !textOffset))
 				{
+					//printf("testing %d\n", of);
+					char* start = &(origtext)[tokens[to + of].start];
+					int size = tokens[to + of].end - tokens[to + of].start;
+					char key[size + 1];
+
+					memcpy(key, start, size);
+					key[size] = '\0';
+
+					//printf("testing %d\n", key);
+					if (strcmp(key, "simpleText")==0)
+					{
+						authorOffset = of + 1;
+						//printf("author: %d\n", authorOffset);
+						
+					}else if (strcmp(key, "text")==0)
+					{
+						textOffset = of + 1;
+						//printf("text: %d\n", textOffset);
+					}
+					of++;
+				}
+				if (authorOffset && textOffset)
+				{
+					char* start = &(origtext)[tokens[to + authorOffset].start];
+					int size = tokens[to + authorOffset].end - tokens[to + authorOffset].start;
+					char author[size + 1];
+					memcpy(author, start, size);
+					author[size] = '\0';
+					memcpy(messageAuthor, author, sizeof(author));
+
+					start = &(origtext)[tokens[to + textOffset].start];
+					size = tokens[to + textOffset].end - tokens[to + textOffset].start;
+					char text[size + 1];
+					memcpy(text, start, size);
+					text[size] = '\0';
+					memcpy(messageText, text, sizeof(text));
+
+
+				
 					if ((retlen + 1024) > retmalloc)
 					{
 						retmalloc += 1024;
@@ -362,7 +390,7 @@ char* GetLivechatDataV1API(const char* apikey, char** continuation)
 	//printf("%s\n", apikey);
 	
 	
-	printf("Continuation: %s\n", *continuation);
+	//printf("Continuation: %s\n", *continuation);
 	if (*continuation == 0 || *continuation[0] == '-')
 	{
 		int len = LoadFileLineByNumberIntoBuffer("..", "ytInitialData.txt", 1, continuationbuff, sizeof(continuationbuff));
